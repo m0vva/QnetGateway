@@ -19,7 +19,6 @@
 #pragma once
 
 #include <atomic>
-#include <mutex>
 #include <string>
 #include <libconfig.h++>
 
@@ -126,5 +125,4 @@ private:
 
 	// helpers
 	CRandom random;
-	std::mutex serialMutex;
 };
