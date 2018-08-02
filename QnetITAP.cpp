@@ -291,9 +291,7 @@ void CQnetITAP::ReadGatewayThread()
 				unsigned char ping[3] = { 0x02u, 0x02u, 0xffu };
 				::memcpy(buf, ping, 3);
 			}
-			serialMutex.lock();
 			SendTo((unsigned char)0x03U, buf);
-			serialMutex.unlock();
 		}
 	}
 	printf("ReadGatewayThread() has quit.\n");
@@ -373,7 +371,9 @@ int CQnetITAP::SendTo(const unsigned char length, const unsigned char *buf)
 	const unsigned int len = (int)length;
 
 	while (ptr < len) {
+		serialMutex.lock();
 		ssize_t n = ::write(serfd, buf + ptr, len - ptr);
+		serialMutex.unlock();
 		if (n < 0) {
 			if (EAGAIN != errno) {
 				printf("Error %d writing to dvap, message=%s\n", errno, strerror(errno));
@@ -423,9 +423,7 @@ bool CQnetITAP::ProcessGateway(const int len, const unsigned char *raw)
 			memcpy(itap.header.my,   dstr.vpkt.hdr.my,   8);
 			memcpy(itap.header.nm,   dstr.vpkt.hdr.nm,   4);
 			itap.header.end = 0xFFU;
-			serialMutex.lock();
 			const int written = SendTo(42U, &itap.length);
-			serialMutex.unlock();
 			if (42 != written) {
 				printf("ERROR: ProcessGateway: Could not write Header ITAP packet\n");
 				return true;
@@ -444,9 +442,7 @@ bool CQnetITAP::ProcessGateway(const int len, const unsigned char *raw)
 				printf("DEBUG: ProcessGateway: unexpected voice sequence number %d\n", itap.voice.sequence);
 			memcpy(itap.voice.ambe, dstr.vpkt.vasd.voice, 12);
 			itap.voice.end = 0xFFU;
-			serialMutex.lock();
 			const int written = SendTo(17U, &itap.length);
-			serialMutex.unlock();
 			if (17 != written) {
 				printf("ERROR: ProcessGateway: Could not write AMBE ITAP packet\n");
 				return true;
