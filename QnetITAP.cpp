@@ -39,12 +39,14 @@
 #include <errno.h>
 #include <thread>
 #include <chrono>
+#include <future>
 
 #include "versions.h"
 #include "QnetITAP.h"
 #include "QnetTypeDefs.h"
 
 std::atomic<bool> CQnetITAP::keep_running(true);
+std::atomic<bool> CQnetITAP::serial_is_ready(false);
 
 CQnetITAP::CQnetITAP() :
 COUNTER(0)
@@ -166,10 +168,14 @@ int CQnetITAP::OpenSocket(const std::string &address, const unsigned short port)
 
 REPLY_TYPE CQnetITAP::GetITAPData(unsigned char *buf)
 {
-	// Shamelessly adapted from Jonathan G4KLX's CIcomController::GetResponse()
-	// and CSerialController::read()
+	// Some ideas were shamelessly adapted from Jonathan G4KLX's CIcomController::GetResponse()
+	// and CSerialController::read(), so he gets a copyright statement at the top!
+
 	// Get the start of the frame or nothing at all
+	serialMutex.lock();
 	int ret = ::read(serfd, buf, 1U);
+	serialMutex.unlock();
+
 	if (ret < 0) {
 		printf("Error when reading first byte from the Icom radio %d: %s", errno, strerror(errno));
 		return RT_ERROR;
@@ -200,7 +206,10 @@ REPLY_TYPE CQnetITAP::GetITAPData(unsigned char *buf)
 			return RT_ERROR;
 		}
 
+		serialMutex.lock();
 		ret = ::read(serfd, buf + offset, length - offset);
+		serialMutex.unlock();
+
 		if (ret < 0 && errno!=EAGAIN) {
 			printf("Error when reading buffer from the Icom radio %d: %s\n", errno, strerror(errno));
 			return RT_ERROR;
@@ -224,6 +233,70 @@ REPLY_TYPE CQnetITAP::GetITAPData(unsigned char *buf)
 		default:
 			return RT_UNKNOWN;
 	}
+}
+
+void CQnetITAP::ReadGatewayThread()
+{
+	unsigned poll_counter = 0;
+
+	sockaddr_in addr;
+	memset(&addr, 0, sizeof(sockaddr_in));
+	socklen_t size = sizeof(sockaddr);
+
+	while (keep_running) {
+		fd_set readfds;
+		FD_ZERO(&readfds);
+		FD_SET(gsock, &readfds);
+
+		struct timeval tv;
+		tv.tv_sec = (poll_counter >= 18) ? 1 : 0;
+		tv.tv_usec = (poll_counter >= 18) ? 0 : 100000;
+
+		// don't care about writefds and exceptfds:
+		// and we'll wait for 100 ms or 1 s, depending on ;
+		int ret = ::select(gsock+1, &readfds, NULL, NULL, &tv);
+		if (ret < 0) {
+			printf("ERROR: GatewayThread: select returned err=%d, %s\n", errno, strerror(errno));
+			keep_running = false;
+			break;
+		}
+
+		if (FD_ISSET(gsock, &readfds)) {
+
+			unsigned char buf[100];
+			ssize_t len = ::recvfrom(gsock, buf, 100, 0, (sockaddr *)&addr, &size);
+
+			if (len < 0) {
+				printf("ERROR: Run: recvfrom(gsock) returned error %d, %s\n", errno, strerror(errno));
+				keep_running = false;
+				break;
+			}
+
+			if (ntohs(addr.sin_port) != G2_IN_PORT)
+				printf("DEBUG: Run: read from gsock but the port was %u, expected %u\n", ntohs(addr.sin_port), G2_IN_PORT);
+
+			if (0 == ::memcmp(buf, "DSTR", 4)) {
+				//printf("read %d bytes from QnetGateway\n", (int)len);
+				if (ProcessGateway(len, buf))
+					keep_running = false;
+			}
+
+		} else {
+			// nothing to read, so do the polling or pinging
+			unsigned char buf[3];
+			if (poll_counter++ < 18) {
+				unsigned char poll[3] = { 0xffu, 0xffu, 0xffu };
+				::memcpy(buf, poll, 3);
+			} else {
+				unsigned char ping[3] = { 0x02u, 0x02u, 0xffu };
+				::memcpy(buf, ping, 3);
+			}
+			serialMutex.lock();
+			SendTo((unsigned char)0x03U, buf);
+			serialMutex.unlock();
+		}
+	}
+	printf("ReadGatewayThread() has quit.\n");
 }
 
 void CQnetITAP::Run(const char *cfgfile)
@@ -250,106 +323,45 @@ void CQnetITAP::Run(const char *cfgfile)
 
 	printf("vsock=%d, gsock=%d serfd=%d\n", vsock, gsock, serfd);
 
-	keep_running = true;
-	unsigned poll_counter = 0;
-	bool is_alive = false;
+	// start the thread to read from the gateway and write to the serial port
+	auto gthread = std::async(std::launch::async, &CQnetITAP::ReadGatewayThread, this);
 
+	// while this thread reads from the serial port and writes to the gateway
 	while (keep_running) {
 		fd_set readfds;
 		FD_ZERO(&readfds);
 		FD_SET(serfd, &readfds);
-		FD_SET(gsock, &readfds);
-		int maxfs = (serfd > gsock) ? serfd : gsock;
-
-		struct timeval tv;
-		tv.tv_sec = (poll_counter >= 18) ? 1 : 0;
-		tv.tv_usec = (poll_counter >= 18) ? 0 : 100000;
 
 		// don't care about writefds and exceptfds:
-		// and we'll wait for 100 ms or 1 s, depending on ;
-		int ret = ::select(maxfs+1, &readfds, NULL, NULL, &tv);
+		// and we'll wait forever for data;
+		int ret = ::select(serfd+1, &readfds, NULL, NULL, NULL);
 		if (ret < 0) {
 			printf("ERROR: Run: select returned err=%d, %s\n", errno, strerror(errno));
 			break;
 		}
 
-		if (0 == ret) {
-			// nothing to read, so do the polling or pinging
-			unsigned char buf[3];
-			if (poll_counter++ < 18) {
-				unsigned char poll[3] = { 0xffu, 0xffu, 0xffu };
-				::memcpy(buf, poll, 3);
-			} else {
-				unsigned char ping[3] = { 0x02u, 0x02u, 0xffu };
-				::memcpy(buf, ping, 3);
-			}
-			SendTo((unsigned char)0x03U, buf);
-			continue;
-		}
-
-		// there is something to read!
 		unsigned char buf[100];
-		ssize_t len;
-		REPLY_TYPE rt = RT_NOTHING;
-
-		if (FD_ISSET(serfd, &readfds)) {
-			rt = GetITAPData(buf);
-
-			if (rt == RT_ERROR)
-				break;
-
-			if (rt == RT_TIMEOUT)
-				continue;
-
-		} else if (FD_ISSET(gsock, &readfds)) {
-			sockaddr_in addr;
-			memset(&addr, 0, sizeof(sockaddr_in));
-			socklen_t size = sizeof(sockaddr);
-			len = ::recvfrom(gsock, buf, 100, 0, (sockaddr *)&addr, &size);
-
-			if (len < 0) {
-				printf("ERROR: Run: recvfrom(gsock) returned error %d, %s\n", errno, strerror(errno));
-				break;
-			}
-
-			if (ntohs(addr.sin_port) != G2_IN_PORT)
-				printf("DEBUG: Run: read from gsock but the port was %u, expected %u\n", ntohs(addr.sin_port), G2_IN_PORT);
-
-		}
-
-		if (rt != RT_NOTHING) {
-			//printf("read %d bytes from ITAP\n", (int)buf[0]);
-			if (RT_DATA==rt || RT_HEADER==rt) {
+		switch (GetITAPData(buf)) {
+			case RT_DATA:
+			case RT_HEADER:
 				if (ProcessITAP(buf))
-					break;
-			} else {
-				switch (rt) {
-					//case RT_HEADER_ACK:
-					//	printf("DEBUG: Run: got header acknowledgement\n");
-					//	break;
-					//case RT_DATA_ACK:
-					//	printf("DEBUG: Run: got data   acknowledgement\n");
-					//	break;
-					case RT_PONG:
-						if (! is_alive) {
-							printf("Icom Radio is connected.\n");
-							is_alive = true;
-						}
-						break;
-					case RT_TIMEOUT:
-						printf("DEBUG: Run: got a timeout.\n");
-						break;
-					default:
-						break;
+					keep_running = false;
+				break;
+			case RT_ERROR:
+				keep_running = false;
+				break;
+			case RT_PONG:
+				if (! serial_is_ready) {
+					printf("Icom Radio is connected!\n");
+					serial_is_ready = true;
 				}
-			}
-		} else if (0 == ::memcmp(buf, "DSTR", 4)) {
-			//printf("read %d bytes from QnetGateway\n", (int)len);
-			if (ProcessGateway(len, buf))
+				break;
+			default:
 				break;
 		}
 	}
 
+	gthread.get();
 	::close(serfd);
 	::close(gsock);
 	::close(vsock);
@@ -411,7 +423,10 @@ bool CQnetITAP::ProcessGateway(const int len, const unsigned char *raw)
 			memcpy(itap.header.my,   dstr.vpkt.hdr.my,   8);
 			memcpy(itap.header.nm,   dstr.vpkt.hdr.nm,   4);
 			itap.header.end = 0xFFU;
-			if (42 != SendTo(42U, &itap.length)) {
+			serialMutex.lock();
+			const int written = SendTo(42U, &itap.length);
+			serialMutex.unlock();
+			if (42 != written) {
 				printf("ERROR: ProcessGateway: Could not write Header ITAP packet\n");
 				return true;
 			}
@@ -429,7 +444,10 @@ bool CQnetITAP::ProcessGateway(const int len, const unsigned char *raw)
 				printf("DEBUG: ProcessGateway: unexpected voice sequence number %d\n", itap.voice.sequence);
 			memcpy(itap.voice.ambe, dstr.vpkt.vasd.voice, 12);
 			itap.voice.end = 0xFFU;
-			if (17 != SendTo(17U, &itap.length)) {
+			serialMutex.lock();
+			const int written = SendTo(17U, &itap.length);
+			serialMutex.unlock();
+			if (17 != written) {
 				printf("ERROR: ProcessGateway: Could not write AMBE ITAP packet\n");
 				return true;
 			}

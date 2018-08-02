@@ -61,7 +61,7 @@ qnrelay : QnetRelay.o
 	g++ $(CPPFLAGS) -o qnrelay QnetRelay.o $(LDFLAGS)
 
 qnitap : QnetITAP.o Random.o
-	g++ $(CPPFLAGS) -o qnitap QnetITAP.o Random.o $(LDFLAGS)
+	g++ $(CPPFLAGS) -o qnitap QnetITAP.o Random.o $(LDFLAGS) -pthread
 
 qndvap : QnetDVAP.o DVAPDongle.o Random.o $(DSTROBJS)
 	g++ $(CPPFLAGS) -o qndvap QnetDVAP.o DVAPDongle.o Random.o $(DSTROBJS) $(LDFLAGS) -pthread

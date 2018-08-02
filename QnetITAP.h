@@ -19,6 +19,7 @@
 #pragma once
 
 #include <atomic>
+#include <mutex>
 #include <string>
 #include <libconfig.h++>
 
@@ -87,6 +88,7 @@ public:
 
 	// data
 	static std::atomic<bool> keep_running;
+	static std::atomic<bool> serial_is_ready;
 
 private:
 	// functions
@@ -100,6 +102,7 @@ private:
 	int SendTo(const unsigned char length, const unsigned char *buf);
 	REPLY_TYPE GetITAPData(unsigned char *buf);
 	void calcPFCS(const unsigned char *packet, unsigned char *pfcs);
+	void ReadGatewayThread();
 
 	// read configuration file
 	bool ReadConfig(const char *);
@@ -123,4 +126,5 @@ private:
 
 	// helpers
 	CRandom random;
+	std::mutex serialMutex;
 };
