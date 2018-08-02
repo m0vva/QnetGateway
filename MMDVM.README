@@ -8,7 +8,7 @@ system should work. It just needs a g++ compiler with version greater than 4.9.
 These instructions assume you have configured your system with the locale, keyboard
 and time zone. When choosing locale, always choose a "UTF-8" version of your
 locale. And make sure you do "sudo apt-get update && sudo apt-get upgrade" before
-your start. On a Raspberry Pi, you can do all of this with the configureation menu:
+your start. On a Raspberry Pi, you can do all of this with the configuration menu:
 "sudo raspi-config".
 
 If you are using a device that uses the GPIO header on the raspberry pi, you need to

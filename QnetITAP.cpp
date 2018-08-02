@@ -215,6 +215,17 @@ REPLY_TYPE CQnetITAP::GetITAPData(unsigned char *buf)
 			offset += ret;
 	}
 
+	printf("TAE#");
+	for (unsigned int i=0; i<(unsigned int)buf[0]; i++)
+		printf("%02x", buf[i]);
+	printf("\nTAE ");
+	for (unsigned int i=0; i<(unsigned int)buf[0]; i++)
+		if (buf[0]>=0x20U && buf[0]<0x7FU)
+			printf(" %c", (char)buf[i]);
+		else
+			printf(" .");
+	printf("\n\n");
+
 	switch (buf[1U]) {
 		case 0x03U:
 			return RT_PONG;
