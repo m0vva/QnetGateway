@@ -172,9 +172,7 @@ REPLY_TYPE CQnetITAP::GetITAPData(unsigned char *buf)
 	// and CSerialController::read(), so he gets a copyright statement at the top!
 
 	// Get the start of the frame or nothing at all
-	serialMutex.lock();
 	int ret = ::read(serfd, buf, 1U);
-	serialMutex.unlock();
 
 	if (ret < 0) {
 		printf("Error when reading first byte from the Icom radio %d: %s", errno, strerror(errno));
@@ -206,9 +204,7 @@ REPLY_TYPE CQnetITAP::GetITAPData(unsigned char *buf)
 			return RT_ERROR;
 		}
 
-		serialMutex.lock();
 		ret = ::read(serfd, buf + offset, length - offset);
-		serialMutex.unlock();
 
 		if (ret < 0 && errno!=EAGAIN) {
 			printf("Error when reading buffer from the Icom radio %d: %s\n", errno, strerror(errno));
@@ -371,20 +367,28 @@ int CQnetITAP::SendTo(const unsigned char length, const unsigned char *buf)
 	const unsigned int len = (int)length;
 
 	while (ptr < len) {
-		serialMutex.lock();
-		ssize_t n = ::write(serfd, buf + ptr, len - ptr);
-		serialMutex.unlock();
+		fd_set wrfd;
+		FD_ZERO(&wrfd);
+		FD_SET(serfd, &wrfd);
+
+		int n = select(serfd+1, NULL, &wrfd, NULL, NULL);
 		if (n < 0) {
-			if (EAGAIN != errno) {
-				printf("Error %d writing to dvap, message=%s\n", errno, strerror(errno));
-				return -1;
-			}
+			printf("SendTo select error %d: %s\n", errno, strerror(errno));
+			return -1;
 		}
 
-		if (n > 0)
-			ptr += n;
+		if (FD_ISSET(serfd, &wrfd)) {
+			ssize_t written = ::write(serfd, buf + ptr, len - ptr);
+			if (written < 0) {
+				if (EAGAIN != errno) {
+					printf("Error %d writing to dvap, message=%s\n", errno, strerror(errno));
+					return -1;
+				}
+			}
+			if (written > 0)
+				ptr += written;
+		}
 	}
-
 	return len;
 }
 
