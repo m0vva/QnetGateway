@@ -220,7 +220,7 @@ REPLY_TYPE CQnetITAP::GetITAPData(unsigned char *buf)
 		printf("%02x", buf[i]);
 	printf("\nTAE ");
 	for (unsigned int i=0; i<(unsigned int)buf[0]; i++)
-		if (buf[0]>=0x20U && buf[0]<0x7FU)
+		if (buf[i]>=0x20U && buf[i]<0x7FU)
 			printf(" %c", (char)buf[i]);
 		else
 			printf(" .");
