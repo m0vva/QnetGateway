@@ -182,8 +182,10 @@ REPLY_TYPE CQnetITAP::GetITAPData(unsigned char *buf)
 	if (ret == 0)
 		return RT_TIMEOUT;
 
-	if (buf[0U] == 0xFFU)
+	if (buf[0U] == 0xFFU) {
+		printf("Rff\n");
 		return RT_TIMEOUT;
+	}
 
 	unsigned int length = buf[0U];
 
@@ -215,10 +217,10 @@ REPLY_TYPE CQnetITAP::GetITAPData(unsigned char *buf)
 			offset += ret;
 	}
 
-	printf("TAE#");
+	printf("R");
 	for (unsigned int i=0; i<(unsigned int)buf[0]; i++)
 		printf("%02x", buf[i]);
-	printf("\nTAE ");
+	printf("\n ");
 	for (unsigned int i=0; i<(unsigned int)buf[0]; i++)
 		if (buf[i]>=0x20U && buf[i]<0x7FU)
 			printf(" %c", (char)buf[i]);
@@ -376,6 +378,17 @@ int CQnetITAP::SendTo(const unsigned char length, const unsigned char *buf)
 {
 	unsigned int ptr = 0;
 	const unsigned int len = (int)length;
+
+	printf("T");
+	for (unsigned int i=0; i<(unsigned int)buf[0]; i++)
+		printf("%02x", buf[i]);
+	printf("\n ");
+	for (unsigned int i=0; i<(unsigned int)buf[0]; i++)
+		if (buf[i]>=0x20U && buf[i]<0x7FU)
+			printf(" %c", (char)buf[i]);
+		else
+			printf(" .");
+	printf("\n\n");
 
 	while (ptr < len) {
 		fd_set wrfd;
