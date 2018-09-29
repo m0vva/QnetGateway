@@ -1575,9 +1575,10 @@ void CQnetGateway::ProcessRepeater()
 
 				// extract 20-byte RADIO ID
 				if ((tmp_txt[0] != 0x55) || (tmp_txt[1] != 0x2d) || (tmp_txt[2] != 0x16)) {
-
+printf("in text process!\n");
 					for (int i=0; i<3; i++) {
 						if (band_txt[i].streamID == rptrbuf.vpkt.streamid) {
+printf("found streamID on band %d, new_group[i] = %s (need false)\n", i, new_group[i] ? "TRUE" : "FALSE");
 							if (new_group[i]) {
 								tmp_txt[0] = tmp_txt[0] ^ 0x70;
 								header_type = tmp_txt[0] & 0xf0;
@@ -1713,6 +1714,7 @@ void CQnetGateway::ProcessRepeater()
 							}
 							else
 							{
+printf("to_print[i]=%s ABC_grp[i]=%s\n", to_print[i] ? "TRUE" : "FALSE", ABC_grp[i] ? "TRUE" : "FALSE");
 								if (to_print[i] == 3) {
 									if (ABC_grp[i]) {
 										band_txt[i].txt[band_txt[i].txt_cnt] = tmp_txt[0] ^ 0x70;
@@ -1739,7 +1741,7 @@ void CQnetGateway::ProcessRepeater()
 												rptrbuf.vpkt.vasd1.text[2] = 0x93;
 											}
 										}
-
+printf("txt_cnt=%d C_seen=%s txt_stats_sent=%s\n", band_txt[i].txt_cnt, C_seen[i] ? "TRUE" : "FALSE", band_txt[i].txt_stats_sent ? "TRUE" : "FALSE");
 										if ((band_txt[i].txt_cnt >= 20) || C_seen[i]) {
 											band_txt[i].txt[band_txt[i].txt_cnt] = '\0';
 											if (!band_txt[i].txt_stats_sent) {
