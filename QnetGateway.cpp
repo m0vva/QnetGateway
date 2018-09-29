@@ -1582,7 +1582,7 @@ printf("found streamID on band %d, new_group[i] = %s (need false)\n", i, new_gro
 							if (new_group[i]) {
 								tmp_txt[0] = tmp_txt[0] ^ 0x70;
 								header_type = tmp_txt[0] & 0xf0;
-
+printf("header type = 0x%02x\n", header_type);
 								if ((header_type == 0x50) ||  /* header  */ (header_type == 0xc0)) {  /* squelch */
 									new_group[i] = false;
 									to_print[i] = 0;
