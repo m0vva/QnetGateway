@@ -3583,7 +3583,8 @@ bool CQnetLink::Init(const char *cfgfile)
 
 	// authenticate DPlus
 	CDPlusAuthenticator dplus(owner, std::string("auth.dstargateway.org"));
-	dplus.Process();
+	if (dplus.Process())
+		printf("DPlus Network authenticated.\n");
 
 	/* create our server */
 	if (!srv_open()) {
