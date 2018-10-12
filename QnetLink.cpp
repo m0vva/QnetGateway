@@ -56,6 +56,7 @@
 
 #include "versions.h"
 #include "QnetLink.h"
+#include "DPlusAuthenticator.h"
 
 using namespace libconfig;
 
@@ -3579,6 +3580,10 @@ bool CQnetLink::Init(const char *cfgfile)
 	/* Open DB */
 	if (!load_gwys(gwys))
 		return true;
+
+	// authenticate DPlus
+	CDPlusAuthenticator dplus(owner, std::string("auth.dstargateway.org"));
+	dplus.Process();
 
 	/* create our server */
 	if (!srv_open()) {
