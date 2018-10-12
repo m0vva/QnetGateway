@@ -17,11 +17,14 @@
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
- #include <string>
- #include <cassert>
- #include <cstdio>
- #include <cctype>
- #include <cstring>
+#include <string>
+#include <cassert>
+#include <cstdio>
+#include <cctype>
+#include <cstring>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
 
 #include "DPlusAuthenticator.h"
 //#include "DStarDefines.h"
@@ -44,6 +47,7 @@ CDPlusAuthenticator::~CDPlusAuthenticator()
 bool CDPlusAuthenticator::Process()	// return true if everything when okay
 {
 	struct addrinfo hints, *infoptr;
+    memset(&hints, 0, sizeof(struct addrinfo));
     hints.ai_family = AF_INET; // AF_INET means IPv4 only addresses
     hints.ai_socktype = SOCK_STREAM;
 
